@@ -8,6 +8,8 @@ import os
 from torchvision import datasets
 from torchvision import transforms
 from PIL import Image
+import matplotlib
+matplotlib.use("Agg")
 from matplotlib import pyplot as plt
 from torch.utils.data import Dataset, DataLoader
 from typing import List, Callable, Tuple, Generator, Union

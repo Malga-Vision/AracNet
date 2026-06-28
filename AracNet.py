@@ -306,6 +306,7 @@ def evaluate_model(
     make_figures=True,
     eval_name="test",
     dataset="BFFHQ",
+    save_dir=None,
 ):
     model.eval()
     groups_size = (num_classes,) * (num_bias_attributes + 1)
@@ -368,11 +369,11 @@ def evaluate_model(
         if model.aracne:
             parallel_preds = torch.cat(parallel_preds, dim=0)
             for l in range(len(model.parallel_heads)):
-                softmax_distribution_hist(parallel_preds[:, l], all_targets, all_biases, target_class=0, epoch=eval_name, wb=wb, layer=l, dataset=dataset)
-                softmax_distribution_hist(parallel_preds[:, l], all_targets, all_biases, target_class=1, epoch=eval_name, wb=wb, layer=l, dataset=dataset)
+                softmax_distribution_hist(parallel_preds[:, l], all_targets, all_biases, target_class=0, epoch=eval_name, wb=wb, layer=l, dataset=dataset, save_dir=save_dir)
+                softmax_distribution_hist(parallel_preds[:, l], all_targets, all_biases, target_class=1, epoch=eval_name, wb=wb, layer=l, dataset=dataset, save_dir=save_dir)
 
-        softmax_distribution_hist(all_outputs, all_targets, all_biases, target_class=0, epoch=eval_name, wb=wb, layer=-1, dataset=dataset)
-        softmax_distribution_hist(all_outputs, all_targets, all_biases, target_class=1, epoch=eval_name, wb=wb, layer=-1, dataset=dataset)
+        softmax_distribution_hist(all_outputs, all_targets, all_biases, target_class=0, epoch=eval_name, wb=wb, layer=-1, dataset=dataset, save_dir=save_dir)
+        softmax_distribution_hist(all_outputs, all_targets, all_biases, target_class=1, epoch=eval_name, wb=wb, layer=-1, dataset=dataset, save_dir=save_dir)
 
 
 # ---------------------------------------------------------------------------
@@ -392,6 +393,7 @@ def train_body(
     make_figures=True,
     dataset="BFFHQ",
     bias_amount=99.5,
+    save_dir=None,
 ):
     cur_model_name = f"aracnet-{model.aracne}_{base_model}_{dataset}_{bias_amount}-biased-init.pt"
     torch.save(model.state_dict(), os.path.join(PATH_TO_MODELS, cur_model_name))
@@ -458,8 +460,8 @@ def train_body(
             epoch_outputs = torch.cat(epoch_outputs, dim=0)
             epoch_targets = torch.cat(epoch_targets, dim=0)
             epoch_biases  = torch.cat(epoch_biases,  dim=0)
-            softmax_distribution_hist(epoch_outputs, epoch_targets, epoch_biases, target_class=0, epoch=epoch, wb=wb, layer=-1, dataset=dataset)
-            softmax_distribution_hist(epoch_outputs, epoch_targets, epoch_biases, target_class=1, epoch=epoch, wb=wb, layer=-1, dataset=dataset)
+            softmax_distribution_hist(epoch_outputs, epoch_targets, epoch_biases, target_class=0, epoch=epoch, wb=wb, layer=-1, dataset=dataset, save_dir=save_dir)
+            softmax_distribution_hist(epoch_outputs, epoch_targets, epoch_biases, target_class=1, epoch=epoch, wb=wb, layer=-1, dataset=dataset, save_dir=save_dir)
 
     final_name = f"aracnet-{model.base_model_name}-biased-final.pt"
     torch.save(model.state_dict(), os.path.join(PATH_TO_MODELS, f"{final_name}_{dataset}_{bias_amount}"))
@@ -482,6 +484,7 @@ def learning_from_legs_failure(
     make_figures=True,
     dataset="waterbirds",
     train_set=None,
+    save_dir=None,
 ):
     # Build a fresh debiasing model whose training signal comes from the parallel heads
     if dataset in ("waterbirds", "UrbanCars"):
@@ -693,11 +696,11 @@ def learning_from_legs_failure(
                 epoch_parallel = torch.cat(epoch_parallel, dim=0)
                 for l in range(1, len(model.parallel_heads)):
                     for cls_idx in range(num_classes):
-                        softmax_distribution_hist(epoch_parallel[:, l], epoch_targets, epoch_biases, target_class=cls_idx, epoch=epoch, wb=wb, layer=l, dataset=dataset)
+                        softmax_distribution_hist(epoch_parallel[:, l], epoch_targets, epoch_biases, target_class=cls_idx, epoch=epoch, wb=wb, layer=l, dataset=dataset, save_dir=save_dir)
                         ranking[l] += ranking_score_histogram(epoch_parallel[:, l], epoch_targets, cls_idx, thresh=confidence_threshold, thresh_max=0.7) / num_classes
 
                 for cls_idx in range(num_classes):
-                    softmax_distribution_hist(epoch_outputs, epoch_targets, epoch_biases, target_class=cls_idx, epoch=epoch, wb=wb, layer=-1, dataset=dataset)
+                    softmax_distribution_hist(epoch_outputs, epoch_targets, epoch_biases, target_class=cls_idx, epoch=epoch, wb=wb, layer=-1, dataset=dataset, save_dir=save_dir)
 
         # At the end of warmup, select the best monitor head using the three ranking metrics
         if epoch == warmup - 1:

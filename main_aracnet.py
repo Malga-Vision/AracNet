@@ -253,16 +253,17 @@ if __name__ == "__main__":
                 dataset=dataset,
                 bias_amount=bias_amount,
                 wb=wb,
+                save_dir=save_results_to,
             )
         finally:
             torch.save(model.state_dict(), os.path.join(save_results_to, f"{base_model_name}_{dataset}_{bias_amount}-biased-final.pth"))
             if dataset != "UrbanCars":
-                evaluate_model(model, train_loader, num_classes, num_bias_attributes=1, wb=wb, make_figures=True, eval_name="train", dataset=dataset)
-                evaluate_model(model, test_loader,  num_classes, num_bias_attributes=1, wb=wb, make_figures=True, eval_name="test",  dataset=dataset)
+                evaluate_model(model, train_loader, num_classes, num_bias_attributes=1, wb=wb, make_figures=True, eval_name="train", dataset=dataset, save_dir=save_results_to)
+                evaluate_model(model, test_loader,  num_classes, num_bias_attributes=1, wb=wb, make_figures=True, eval_name="test",  dataset=dataset, save_dir=save_results_to)
 
         if dataset != "UrbanCars":
-            evaluate_model(model, train_loader, num_classes, num_bias_attributes=1, wb=wb, make_figures=True, eval_name="train", dataset=dataset)
-            evaluate_model(model, test_loader,  num_classes, num_bias_attributes=1, wb=wb, make_figures=True, eval_name="test",  dataset=dataset)
+            evaluate_model(model, train_loader, num_classes, num_bias_attributes=1, wb=wb, make_figures=True, eval_name="train", dataset=dataset, save_dir=save_results_to)
+            evaluate_model(model, test_loader,  num_classes, num_bias_attributes=1, wb=wb, make_figures=True, eval_name="test",  dataset=dataset, save_dir=save_results_to)
 
     # --- Load biased backbone checkpoint ---
     try:
@@ -293,6 +294,7 @@ if __name__ == "__main__":
         wb=wb,
         dataset=dataset,
         train_set=train_set,
+        save_dir=save_results_to,
     )
 
     torch.save(debiasing_model.state_dict(),

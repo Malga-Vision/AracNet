@@ -2,6 +2,9 @@ from typing import List
 import torch
 import numpy as np
 import torch.nn as nn
+import os
+import matplotlib
+matplotlib.use("Agg")
 from matplotlib import pyplot as plt
 
 
@@ -91,7 +94,7 @@ def ranking_score_histogram(softmax, targets, target_class, thresh, thresh_max, 
 # ---------------------------------------------------------------------------
 
 @torch.no_grad()
-def softmax_distribution_hist(network_outputs, targets, biases, target_class, epoch, wb, layer="", dataset="BFFHQ"):
+def softmax_distribution_hist(network_outputs, targets, biases, target_class, epoch, wb, layer="", dataset="BFFHQ", save_dir=None):
     """
     Plots and optionally logs the softmax confidence distribution split by
     bias-alignment (aligned vs. conflicting) for a given class and layer.
@@ -152,7 +155,11 @@ def softmax_distribution_hist(network_outputs, targets, biases, target_class, ep
                 plt.tight_layout(pad=0.2)
 
             if epoch % 10 == 0 or epoch == 49:
-                save_path = f"hist_epoch_{epoch}_class{target_class}_layer{layer}.pdf"
+                filename = f"hist_epoch_{epoch}_class{target_class}_layer{layer}.pdf"
+                if save_dir:
+                    save_path = os.path.join(save_dir, filename)
+                else:
+                    save_path = filename
                 plt.savefig(save_path, format="pdf", bbox_inches="tight")
 
             plt.close()
