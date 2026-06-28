@@ -112,12 +112,6 @@ class BAR(Dataset):
     def __len__(self):
         return len(self.y_array)
     
-    def get_group_array(self):
-        return self.group_array
-    
-    def get_label_array(self):
-        return self.y_array
-    
     def __getitem__(self, index):
         file_path = self.filename_array[index]
         class_label = self.y_array[index]
