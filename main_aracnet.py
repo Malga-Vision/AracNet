@@ -254,9 +254,10 @@ if __name__ == "__main__":
                 bias_amount=bias_amount,
                 wb=wb,
                 save_dir=save_results_to,
+                seed=seed,
             )
         finally:
-            torch.save(model.state_dict(), os.path.join(save_results_to, f"{base_model_name}_{dataset}_{bias_amount}-biased-final.pth"))
+            torch.save(model.state_dict(), os.path.join(save_results_to, f"{base_model_name}_{dataset}_{bias_amount}_seed{seed}-biased-final.pth"))
             if dataset != "UrbanCars":
                 evaluate_model(model, train_loader, num_classes, num_bias_attributes=1, wb=wb, make_figures=True, eval_name="train", dataset=dataset, save_dir=save_results_to)
                 evaluate_model(model, test_loader,  num_classes, num_bias_attributes=1, wb=wb, make_figures=True, eval_name="test",  dataset=dataset, save_dir=save_results_to)
@@ -269,13 +270,13 @@ if __name__ == "__main__":
     try:
         model.load_state_dict(torch.load(os.path.join(
             save_results_to,
-            f"aracnet-{model.base_model_name}-{model.aracne}_{dataset}_{bias_amount}-biased-final.pth",
+            f"aracnet-{model.base_model_name}-{model.aracne}_{dataset}_{bias_amount}_seed{seed}-biased-final.pth",
         )))
     except FileNotFoundError:
         save_results_to = f"./hist/SIMPLE/{dataset}/{str(bias_amount).replace('.', '')}/aracnet"
         model.load_state_dict(torch.load(os.path.join(
             save_results_to,
-            f"aracnet-{model.base_model_name}-{model.aracne}_{dataset}_{bias_amount}-biased-final.pth",
+            f"aracnet-{model.base_model_name}-{model.aracne}_{dataset}_{bias_amount}_seed{seed}-biased-final.pth",
         )))
 
     model.freeze_body(True)
@@ -295,10 +296,11 @@ if __name__ == "__main__":
         dataset=dataset,
         train_set=train_set,
         save_dir=save_results_to,
+        seed=seed,
     )
 
     torch.save(debiasing_model.state_dict(),
-               os.path.join(save_results_to, f"debiased_{dataset}_{bias_amount}.pth"))
+               os.path.join(save_results_to, f"debiased_{dataset}_{bias_amount}_seed{seed}.pth"))
 
     if wb is not None:
         wb.finish()

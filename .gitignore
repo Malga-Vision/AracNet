@@ -30,3 +30,5 @@ wandb/
 .vscode/
 .idea/
 .DS_Store
+
+unused_modules_report.md

@@ -73,7 +73,7 @@ class CumulativeCELoss(nn.Module):
 # Layer-ranking scores — used to select the most bimodal parallel head
 # ---------------------------------------------------------------------------
 
-def ranking_score_histogram(softmax, targets, target_class, thresh, thresh_max, **_):
+def ranking_score_histogram(softmax, targets, target_class, **_):
     """
     Spread-based bimodality score: (p99 - p1) * median of per-class softmax values.
     Higher → the head's confidence distribution is more spread out (bimodal signal).

@@ -394,8 +394,9 @@ def train_body(
     dataset="BFFHQ",
     bias_amount=99.5,
     save_dir=None,
+    seed=0,
 ):
-    cur_model_name = f"aracnet-{model.aracne}_{base_model}_{dataset}_{bias_amount}-biased-init.pt"
+    cur_model_name = f"aracnet-{model.aracne}_{base_model}_{dataset}_{bias_amount}_seed{seed}-biased-init.pt"
     torch.save(model.state_dict(), os.path.join(PATH_TO_MODELS, cur_model_name))
 
     for epoch in range(epochs):
@@ -463,7 +464,7 @@ def train_body(
             softmax_distribution_hist(epoch_outputs, epoch_targets, epoch_biases, target_class=0, epoch=epoch, wb=wb, layer=-1, dataset=dataset, save_dir=save_dir)
             softmax_distribution_hist(epoch_outputs, epoch_targets, epoch_biases, target_class=1, epoch=epoch, wb=wb, layer=-1, dataset=dataset, save_dir=save_dir)
 
-    final_name = f"aracnet-{model.base_model_name}-biased-final.pt"
+    final_name = f"aracnet-{model.base_model_name}_seed{seed}-biased-final.pt"
     torch.save(model.state_dict(), os.path.join(PATH_TO_MODELS, f"{final_name}_{dataset}_{bias_amount}"))
     return f"aracnet-{model.base_model_name}-{model.aracne}"
 
@@ -485,6 +486,7 @@ def learning_from_legs_failure(
     dataset="waterbirds",
     train_set=None,
     save_dir=None,
+    seed=0,
 ):
     # Build a fresh debiasing model whose training signal comes from the parallel heads
     if dataset in ("waterbirds", "UrbanCars"):
@@ -498,35 +500,25 @@ def learning_from_legs_failure(
 
     # Dataset-specific hyper-parameters for the debiasing phase
     if dataset == "cifar10c":
-        monitor_head_idx = 2
-        confidence_threshold = 0.05
         lr_debias    = 0.005
         scratch_flag = 1     # train debiasing model from scratch during warmup
-        warmup       = 70
+        warmup       = 50
     elif dataset == "bar":
-        monitor_head_idx = 3
-        confidence_threshold = 0.15
         lr_debias    = 0.00005
         scratch_flag = 0
-        warmup       = 20
+        warmup       = 30
     elif dataset == "BFFHQ":
-        monitor_head_idx = 3
-        confidence_threshold = 0.3
         lr_debias    = 0.00005
         scratch_flag = 0
-        warmup       = 20
+        warmup       = 30
     elif dataset == "waterbirds":
-        monitor_head_idx = 2
-        confidence_threshold = 0.3
         lr_debias    = 0.00005
         scratch_flag = 0
         warmup       = 30
     elif dataset == "UrbanCars":
-        monitor_head_idx = 4
-        confidence_threshold = 0.3
         lr_debias    = 0.00001
         scratch_flag = 0
-        warmup       = 5
+        warmup       = 30
 
     debiasing_model = debiasing_model.to("cuda")
     debiasing_model.loss_fn = nn.CrossEntropyLoss(reduction="none")
@@ -538,7 +530,7 @@ def learning_from_legs_failure(
 
     debias_optimizer = torch.optim.AdamW(debiasing_model.parameters(), lr=lr_debias)
 
-    cur_model_name = f"aracnet-{model.aracne}-biased-init.pt"
+    cur_model_name = f"aracnet-{model.aracne}_seed{seed}-biased-init.pt"
     torch.save(model.state_dict(), os.path.join(PATH_TO_MODELS, cur_model_name))
 
     # One dedicated SGD optimizer per parallel head
@@ -549,9 +541,10 @@ def learning_from_legs_failure(
     new_criterion = nn.CrossEntropyLoss(reduction="none")
 
     ranking = torch.zeros(len(model.parallel_heads))
+    monitor_head_idx = -1
 
     for epoch in range(epochs):
-        model.train(True)
+        model.base_model.eval()
         debiasing_model.train(True)
 
         heads_losses_tot = [AverageMeter() for _ in range(len(model.parallel_heads))]
@@ -566,8 +559,6 @@ def learning_from_legs_failure(
         # Cumulative loss accumulators for diagnostic printing after warmup
         loss_b_aligned   = loss_b_conflict   = 0.0
         loss_u_aligned   = loss_u_conflict   = 0.0
-        correct_aligned  = incorrect_aligned = 0
-        correct_conflict = incorrect_conflict = 0
 
         with torch.enable_grad():
             for _, (images, labels, _) in enumerate(pbar):
@@ -583,13 +574,20 @@ def learning_from_legs_failure(
                 # Collect intermediate activations via hooks and compute parallel head predictions
                 model.parallel_z = {key: model.hooks[key].output for key in model.hooks}
                 model.parallel_y = torch.cat(
-                    [model.parallel_heads[key](model.parallel_z[key]).unsqueeze(1) for key in model.parallel_z],
+                    [
+                        model.parallel_heads[key](model.parallel_z[key]).unsqueeze(1)
+                        if model.parallel_heads[key] is not None
+                        else torch.zeros(images.size(0), 1, num_classes, device=device)
+                        for key in model.parallel_heads
+                    ],
                     dim=1,
                 )
 
                 # Train each parallel head independently
                 monitor_logits = None
                 for i, key in enumerate(model.parallel_heads):
+                    if model.parallel_heads[key] is None:
+                        continue
                     head_optimizers[key].zero_grad()
                     y_head: torch.Tensor = model.parallel_y.transpose(1, 0)[i]
 
@@ -629,16 +627,6 @@ def learning_from_legs_failure(
                     w_monitor = biased_loss / (debiased_loss.detach() + biased_loss + eps)
 
                     loss_task: torch.Tensor = sample_weights.detach() * w_monitor.detach() * debiased_loss
-
-                    low_conf_mask = target_conf <= confidence_threshold
-                    aligned_mask  = class_labels[low_conf_mask] == bias_labels[low_conf_mask]
-                    conflict_mask = class_labels[low_conf_mask] != bias_labels[low_conf_mask]
-                    preds         = torch.argmax(probs, dim=1)
-
-                    correct_aligned   += ((preds[low_conf_mask] == class_labels[low_conf_mask]) & aligned_mask).sum()
-                    incorrect_aligned += ((preds[low_conf_mask] != class_labels[low_conf_mask]) & aligned_mask).sum()
-                    correct_conflict   += ((preds[low_conf_mask] == class_labels[low_conf_mask]) & conflict_mask).sum()
-                    incorrect_conflict += ((preds[low_conf_mask] != class_labels[low_conf_mask]) & conflict_mask).sum()
 
                     mask_aligned  = bias_labels == class_labels
                     mask_conflict = bias_labels != class_labels
@@ -681,8 +669,6 @@ def learning_from_legs_failure(
             n = len(train_loader)
             print(f"aligned_loss_b={loss_b_aligned/n:.4f}  conflict_loss_b={loss_b_conflict/n:.4f}")
             print(f"aligned_loss_u={loss_u_aligned/n:.4f}  conflict_loss_u={loss_u_conflict/n:.4f}")
-            print(f"correct_aligned={correct_aligned}  incorrect_aligned={incorrect_aligned}")
-            print(f"correct_conflict={correct_conflict}  incorrect_conflict={incorrect_conflict}")
             _evaluate_epoch(debiasing_model, dataset, val_loader, device, epoch=epoch, wb=wb, train_set=train_set)
 
         if make_figures:
@@ -697,21 +683,28 @@ def learning_from_legs_failure(
                 for l in range(1, len(model.parallel_heads)):
                     for cls_idx in range(num_classes):
                         softmax_distribution_hist(epoch_parallel[:, l], epoch_targets, epoch_biases, target_class=cls_idx, epoch=epoch, wb=wb, layer=l, dataset=dataset, save_dir=save_dir)
-                        ranking[l] += ranking_score_histogram(epoch_parallel[:, l], epoch_targets, cls_idx, thresh=confidence_threshold, thresh_max=0.7) / num_classes
+                        ranking[l] += ranking_score_histogram(epoch_parallel[:, l], epoch_targets, cls_idx) / num_classes
 
                 for cls_idx in range(num_classes):
                     softmax_distribution_hist(epoch_outputs, epoch_targets, epoch_biases, target_class=cls_idx, epoch=epoch, wb=wb, layer=-1, dataset=dataset, save_dir=save_dir)
 
-        # At the end of warmup, select the best monitor head using the three ranking metrics
+        # At the end of warmup, select the best monitor head using the bimodal score
         if epoch == warmup - 1:
             monitor_head_idx = int(torch.argmax(ranking))
             print(f"Selected monitor head: {monitor_head_idx}  ranking={ranking}")
+            selected_key = list(model.parallel_heads.keys())[monitor_head_idx]
+            for key in list(model.parallel_heads.keys()):
+                if key != selected_key:
+                    model.hooks[key].close()
+                    del model.hooks[key]
+                    model.parallel_heads[key] = None
+                    head_optimizers[key] = None
             continue
 
         print(f"ranking={ranking}  monitor={monitor_head_idx}")
 
     torch.save(model.state_dict(),
-               os.path.join(PATH_TO_MODELS, f"aracnet-{model.base_model_name}-biased-final.pt"))
+               os.path.join(PATH_TO_MODELS, f"aracnet-{model.base_model_name}_seed{seed}-biased-final.pt"))
     torch.save(debiasing_model.state_dict(),
-               os.path.join(PATH_TO_MODELS, f"debiased-{model.base_model_name}.pt"))
+               os.path.join(PATH_TO_MODELS, f"debiased-{model.base_model_name}_seed{seed}.pt"))
     return debiasing_model
