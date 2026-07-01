@@ -428,34 +428,33 @@ def train_body(
                 loss_task_tot.update(loss_task.item(), images.size(0))
 
                 acc1 = accuracy(output, class_labels, topk=(1,))
-                subgroup_masks = get_subgroup_masks(labels, num_classes=(num_classes,) * 2, device=device)
-                subgroup_acc1  = accuracy_subgroup(output, class_labels, subgroup_masks, num_classes=num_classes)
-
                 top1.update(acc1[0], images.size(0))
-                subgroup_top1.update(subgroup_acc1, subgroup_masks)
 
-                acc_a = regroup_by(subgroup_top1, ("aligned",))
-                acc_m = regroup_by(subgroup_top1, ("misaligned",))
-                pbar.set_postfix(
-                    epoch=epoch,
-                    acc1=top1.avg,
-                    acc_a=acc_a[0].item(),
-                    acc_m=acc_m[0].item(),
-                    loss=loss_task_tot.avg,
-                )
+                if dataset != "UrbanCars":
+                    subgroup_masks = get_subgroup_masks(labels, num_classes=(num_classes,) * 2, device=device)
+                    subgroup_acc1  = accuracy_subgroup(output, class_labels, subgroup_masks, num_classes=num_classes)
+                    subgroup_top1.update(subgroup_acc1, subgroup_masks)
+                    acc_a = regroup_by(subgroup_top1, ("aligned",))
+                    acc_m = regroup_by(subgroup_top1, ("misaligned",))
+                    pbar.set_postfix(
+                        epoch=epoch,
+                        acc1=top1.avg,
+                        acc_a=acc_a[0].item(),
+                        acc_m=acc_m[0].item(),
+                        loss=loss_task_tot.avg,
+                    )
+                else:
+                    pbar.set_postfix(epoch=epoch, acc1=top1.avg, loss=loss_task_tot.avg)
 
             torch.save(model.state_dict(), os.path.join(PATH_TO_MODELS, cur_model_name))
 
             if epoch % 5 == 0:
                 _evaluate_epoch(model, dataset, val_loader, device, epoch, wb)
 
-        wb.log_output({
-            "epoch": epoch,
-            "loss": loss_task_tot.avg,
-            "acc_1": acc1,
-            "acc_a": acc_a[0].item(),
-            "acc_m": acc_m[0].item(),
-        })
+        log_dict = {"epoch": epoch, "loss": loss_task_tot.avg, "acc_1": acc1}
+        if dataset != "UrbanCars":
+            log_dict.update({"acc_a": acc_a[0].item(), "acc_m": acc_m[0].item()})
+        wb.log_output(log_dict)
 
         if make_figures:
             epoch_outputs = torch.cat(epoch_outputs, dim=0)
@@ -649,21 +648,29 @@ def learning_from_legs_failure(
                 epoch_parallel.append(model.parallel_y)
 
                 acc1  = accuracy(output, class_labels, topk=(1,))
-                subgroup_masks = get_subgroup_masks(labels, num_classes=(num_classes,) * 2, device=device)
-                subgroup_acc1  = accuracy_subgroup(output, class_labels, subgroup_masks, num_classes=num_classes)
                 top1.update(acc1[0], images.size(0))
-                subgroup_top1.update(subgroup_acc1, subgroup_masks)
 
-                acc_a = regroup_by(subgroup_top1, ("aligned",))
-                acc_m = regroup_by(subgroup_top1, ("misaligned",))
-                pbar.set_postfix(
-                    epoch=epoch,
-                    acc1=top1.avg,
-                    acc_a=acc_a[0].item(),
-                    acc_m=acc_m[0].item(),
-                    heads_losses=[f"{heads_losses_tot[i].avg:.3f}" for i in range(len(model.parallel_heads))],
-                    heads_accs=[f"{heads_accs_tot[i].avg:.3f}" for i in range(len(model.parallel_heads))],
-                )
+                if dataset != "UrbanCars":
+                    subgroup_masks = get_subgroup_masks(labels, num_classes=(num_classes,) * 2, device=device)
+                    subgroup_acc1  = accuracy_subgroup(output, class_labels, subgroup_masks, num_classes=num_classes)
+                    subgroup_top1.update(subgroup_acc1, subgroup_masks)
+                    acc_a = regroup_by(subgroup_top1, ("aligned",))
+                    acc_m = regroup_by(subgroup_top1, ("misaligned",))
+                    pbar.set_postfix(
+                        epoch=epoch,
+                        acc1=top1.avg,
+                        acc_a=acc_a[0].item(),
+                        acc_m=acc_m[0].item(),
+                        heads_losses=[f"{heads_losses_tot[i].avg:.3f}" for i in range(len(model.parallel_heads))],
+                        heads_accs=[f"{heads_accs_tot[i].avg:.3f}" for i in range(len(model.parallel_heads))],
+                    )
+                else:
+                    pbar.set_postfix(
+                        epoch=epoch,
+                        acc1=top1.avg,
+                        heads_losses=[f"{heads_losses_tot[i].avg:.3f}" for i in range(len(model.parallel_heads))],
+                        heads_accs=[f"{heads_accs_tot[i].avg:.3f}" for i in range(len(model.parallel_heads))],
+                    )
 
         if epoch > warmup:
             n = len(train_loader)
