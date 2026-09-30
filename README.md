@@ -85,11 +85,13 @@ Backbone and debiased model checkpoints are saved per-seed under:
 
 ## Citation
 
-<!-- ```bibtex
+```bibtex
 @inproceedings{pastore2026aracnet,
-  title     = {AracNet: Revealing Debiasing Signals across Layers with Shallow Monitors},
-  author    = {Pastore, Vito Paolo and Ciranni, Massimiliano and Tartaglione, Enzo and Murino, Vittorio},
-  booktitle = {European Conference on Computer Vision (ECCV)},
-  year      = {2026}
+  title={AracNet: Revealing Debiasing Signals Across Layers with Shallow Monitors},
+  author={Pastore, Vito Paolo and Ciranni, Massimiliano and Tartaglione, Enzo and Murino, Vittorio},
+  booktitle={European Conference on Computer Vision},
+  pages={1--18},
+  year={2026},
+  organization={Springer}
 }
-``` -->
+``` 
