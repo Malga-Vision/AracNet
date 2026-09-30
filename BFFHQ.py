@@ -5,6 +5,8 @@ import torch
 import os
 from torchvision import transforms
 from PIL import Image
+import matplotlib
+matplotlib.use("Agg")
 from matplotlib import pyplot as plt
 from torch.utils.data import Dataset
 from typing import List, Callable, Tuple, Generator, Union

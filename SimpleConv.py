@@ -1,14 +1,21 @@
 #!/usr/bin/env python3
 
 import torch
-from torch import nn
+import numpy as np
+from torch import nn, optim
 from torch.utils.data import DataLoader, TensorDataset
 from typing import Iterable, Tuple, Union
-from torch import optim
-from training_utils import GCELoss
-import utils
-import numpy as np
 from wandb_wrapper import WandbWrapper
+
+
+def _lognorm(sample, mean, logvar, raxis=1):
+    """Log probability under a diagonal Gaussian N(mean, exp(logvar))."""
+    log2pi = np.log(2.0 * np.pi)
+    return torch.sum(
+        -0.5 * ((sample - mean) ** 2.0 * torch.exp(-logvar) + logvar + log2pi),
+        dim=raxis,
+    )
+
 
 class VAE(nn.Module):
     DTYPE = torch.float32
@@ -31,7 +38,7 @@ class VAE(nn.Module):
 
         # self.init_weights()
         self._reconstruction_loss_fn = nn.MSELoss(reduction="sum").to(self.device)
-        self._lognorm_fn = utils.lognorm
+        self._lognorm_fn = _lognorm
         self.reconstruction_loss = torch.inf
         self.KL_divergence = torch.inf
         self.Alpha: float = 1.0
@@ -224,25 +231,6 @@ class SimpleConv(nn.Module):
 
         perclass_bias_preds  = [torch.cat(p, dim=0).cpu() for p in perclass_bias_preds]
         perclass_bias_labels = [torch.cat(p, dim=0).cpu() for p in perclass_bias_labels]
-
-        # for _class in torch.arange(self.num_classes):
-        #     if save_results_to:
-        #         with open(f"{save_results_to}/mistakes_preds.txt", mode="a+") as f:
-        #             f.write(f"Class {_class}\n")
-        #             try:
-        #                 f.write(classification_report(perclass_bias_labels[_class], perclass_bias_preds[_class], target_names=["Unbiased", "Biased"]))
-        #             except ValueError:
-        #                 print("Error during classification report")
-        #                 pass
-        #     else:
-        #         print(f"Class {_class}\n")
-        #         try:
-        #             print(classification_report(perclass_bias_labels[_class], perclass_bias_preds[_class], target_names=["Unbiased", "Biased"]))
-        #         except ValueError:
-        #             print("Error during classification report")
-        #             pass
-        # print("Mistakes CF:")
-        # print(confusion_matrix(torch.cat(bias_targs, dim=0).cpu().numpy(), torch.cat(bias_preds, dim=0).cpu().numpy()))
 
         return torch.cat(bias_preds, dim=0).cpu(), num_misclassified_samples, total_per_class, misclassified_per_class
     
@@ -466,11 +454,11 @@ class SimpleConv(nn.Module):
             }, step=(epoch+1)*len(train_loader))
 
         return (
-            validation_accuracies_avg, validation_accuracies_b, validation_accuracies_u, 
+            validation_accuracies_avg, validation_accuracies_b, validation_accuracies_u,
             test_accuracies_avg, test_accuracies_b, test_accuracies_u
         )
 
-\
+
 if __name__ == "__main__":
     x = torch.randn((1, 3, 224, 224))
     y = SimpleConv(num_classes=10)(x)
